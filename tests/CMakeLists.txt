@@ -22,9 +22,16 @@ add_executable(pair-test)
 target_sources(pair-test PRIVATE pair-test.cpp)
 target_include_directories(pair-test PRIVATE "${CMAKE_SOURCE_DIR}/include/")
 
+
+add_executable(unique-ptr-test)
+target_sources(unique-ptr-test PRIVATE unique-ptr-test.cpp)
+target_include_directories(unique-ptr-test PRIVATE "${CMAKE_SOURCE_DIR}/include/")
+target_link_libraries(unique-ptr-test GTest::gtest GTest::gtest_main)
+
 include(GoogleTest)
 
 gtest_discover_tests(vector-test)
+gtest_discover_tests(unique-ptr-test)
 gtest_discover_tests("optional-test")
 gtest_discover_tests("fn-test")
 
