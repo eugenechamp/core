@@ -5,9 +5,10 @@
 #include "allocator.hpp"
 #include <cstring>
 #include <memory>
-
+#include <cassert>
+ 
 template<typename T, typename A = std::allocator<T>>
-class Vec {
+class [[nodiscard]] Vec {
 public:
   using value_type     = T;
   using reference      = T&;
@@ -25,6 +26,8 @@ public:
     : m_{ .alloc = other.m_.alloc }
   {
     _do_alloc(other.size());
+    
+    /// BUGFIX: this is wrong we need to copy each element, not memcopying it, stupido
     _do_memcopy(other.data(), other.size());
     m_.size = other.size();
   }
@@ -38,7 +41,7 @@ public:
   }
   
   Vec(size_type _capacity, allocator_type&& _alloc)
-    : m_{.alloc = _alloc}
+    : m_{.alloc = CORE_MOVE(_alloc)}
   {
     
   }
@@ -49,7 +52,7 @@ public:
     _insert_end(ilist.begin(), ilist.end());
   }
 
-  ~Vec() {
+  ~Vec() noexcept {
     _tidy_deallocate();
     m_.data     = nullptr;
     m_.size     = {};
@@ -97,10 +100,10 @@ public:
 
       _do_assign_range(other.begin(), last);
       
-      //TODO: replace with insert() later on
+      //TODO: replace with insert() later
       for (size_type i = 0; last != other.end(); ++last, ++i)
       {
-        ::new((void*)(m_.size + i)) value_type(*last);
+        ::new((void*)(m_.data + i)) value_type(*last);
       }
     }
     
@@ -160,32 +163,34 @@ public:
   }
 
   void push_back(const value_type& element) {
-    if (size() >= capacity())
-    {
-      _do_realloc(_new_capacity());
-    }
-
-    std::construct_at(&data[m_.size - 1], element);
-    m_.size++;
-  }
-
-  void push_back(value_type&& element) {
-    if (size() >= capacity())
+    if (m_.size == m_.capacity)
     {
       _do_realloc(_new_capacity());
     }
     
-    std::construct_at(m_.data + m_.size, std::move(element));
+    ::new ((void*)(m_.data + m_.size)) value_type(element);
+
     m_.size++;
   }
 
-  auto emplace_back(auto&&... args) -> value_type& {
-    if (size() >= capacity())
+  void push_back(value_type&& element) {
+    if (m_.size == m_.capacity)
     {
       _do_realloc(_new_capacity());
     }
 
-    value_type* val = ::new((void*)(m_.data + m_.size)) value_type(std::forward<decltype(args)>(args)...);   //std::construct_at(m_.size, std::forward<decltype(args)>(args)...);
+    ::new((void*)(m_.data + m_.size)) value_type(CORE_MOVE(element));
+    
+    m_.size++;
+  }
+
+  auto emplace_back(auto&&... args) -> value_type& {
+    if (m_.size == m_.capacity)
+    {
+      _do_realloc(_new_capacity());
+    }
+
+    value_type* val = ::new((void*)(m_.data + m_.size)) value_type(CORE_FWD(args)...);
 
     m_.size++;
 
@@ -200,13 +205,23 @@ public:
   // TODO: implement
   auto insert(const_iterator pos, const value_type& value) -> iterator {
     
+    assert(pos >= begin() && pos <= end());
+
     // _insert_value(&(*pos), value);
     iterator it;
-    if(pos < begin() + capacity())
+    if(pos == end())
     {
-      ::new(data() + size()) value_type(std::move(back()));
+      push_back(value);
+      return end() - 1;
+      
+      ::new((void*)(data() + size())) value_type(CORE_MOVE(back()));
       it = std::move_backward(pos, m_.size - 1, m_.size);
       ::new(m_.size) value_type(value);
+    }
+    else if(pos == begin())
+    {
+      
+      return begin();
     }
     else 
     {
@@ -220,7 +235,6 @@ public:
 
   auto insert(const_iterator pos, value_type&& value) -> iterator {
     return {};
-
   }
   
   auto insert(const_iterator pos, size_type count, const value_type& value) -> iterator {
@@ -235,32 +249,72 @@ public:
   template<typename Iter>
   auto insert(const_iterator pos, Iter first, Iter last) -> iterator {
     return {};
+  }
+
+  void pop_swap(iterator iterator) {
+    value_type& last = *back();
+    value_type& elem = *iterator;
+    elem.value_type();
+
+    if constexpr(std::is_trivial_v<value_type>)
+    {
+      elem = last;
+    }
+    else
+    {
+      std::memcpy(&elem, &last, sizeof(value_type));
+    }
+    m_.size--;
+  }
+
+  auto find(const value_type& value) -> iterator {
+
+  }
+
+  auto find(const value_type& value) const -> const iterator {
     
+  }
+  
+  bool in_range(iterator iterator) {
+    return iterator >= begin() && iterator < end();
+  }
+
+  auto erase(const iterator iterator) {
+
+  }
+
+  auto remove(const value_type& value) -> size_type {
+    return {};
+  }
+
+  template<typename Predicate>
+  auto remove_if(Predicate predicate) -> size_type {
+    return {};
   }
 
   template<typename Container>
-  auto append(const Container& container) {
+  void append(const Container& container) {
     _insert_end(container.begin(), container.end());
   }
   
   template<typename Container>
-  auto append(Container&& container) {
+  void append(Container&& container) {
     _insert_end(std::move_iterator(container.begin()), std::move_iterator(container.end()));
   }
 
   template<typename Container>
-  auto prepend(const Container& container) {
+  void prepend(const Container& container) {
     insert(begin(), container.begin(), container.end());
   }
   
   template<typename Container>
-  auto prepend(Container&& container) {
+  void prepend(Container&& container) {
     insert(begin(), std::move_iterator(container.begin()), std::move_iterator(container.end()));
   }
 
   // TODO: implement 
   auto emplace(const_iterator it, auto&&... args) {
-  
+    
   }
 
   auto begin() -> iterator {
@@ -308,18 +362,23 @@ public:
   }
   
   auto back() -> value_type& {
-    return *(m_.data + m_.size);
+    assert(!empty());
+
+    return *(m_.data + (m_.size - 1));
   }
 
   auto back() const -> const value_type& {
-    return *(m_.data + m_.size);
+    assert(!empty());
+    return *(m_.data + (m_.size - 1));
   }
 
   auto front() -> value_type& {
+    assert(!empty());
     return *m_.data;
   }
 
   auto front() const -> const value_type& {
+    assert(!empty());
     return *m_.data;
   }
 
@@ -377,7 +436,7 @@ public:
   }
   
   auto _emplace_at(size_type pos, auto&&... args) -> value_type& {
-    ::new((void*)(m_.data + pos)) value_type(std::forward<decltype(args)>(args)...);
+    return *::new((void*)(m_.data + pos)) value_type(CORE_FWD(args)...);
   }
 
 private:
@@ -399,9 +458,9 @@ private:
   void _do_realloc(size_type ncap) {
     value_type* p = m_.alloc.allocate(ncap);
     
-    _do_memcopy(p, size());
+    _do_memcopy(p, m_.size);
     
-    m_.alloc.deallocate(m_.data, capacity());
+    m_.alloc.deallocate(m_.data, m_.capacity);
 
     m_.data     = p;
     m_.capacity = ncap;
@@ -445,10 +504,11 @@ private:
     }
   }
 
-  auto _new_capacity() noexcept -> size_type {
-    return size_type(!capacity()) + capacity() * 2ull;
+  auto _new_capacity() const noexcept -> size_type {
+    return size_type(!m_.capacity) + m_.capacity * size_type(2);
   }
 
+  // dead code
   void _do_move(_Memdata& m) noexcept {
     m_ = {
       .data = m.data,
@@ -491,7 +551,7 @@ private:
   //   }
 
   //   m_.size = m_.size + n;
-    
+
   //   return end() - 1;
   // }
   
@@ -500,7 +560,7 @@ private:
     
     size_type n = size_type(std::distance(first, last));
     
-    // TODO: remove this if statement we already check in reserve()
+    // TODO: remove this if statement we already check that in reserve()
     if(size() + n >= capacity())
     {
       reserve(size() + n);

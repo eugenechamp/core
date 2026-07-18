@@ -1,43 +1,8 @@
 #pragma once
+#include "def.hpp"
+#include "concepts.hpp"
 #include <utility>
-
-namespace traits {
-  namespace _ {
-    
-    template<typename T>
-    struct decay_functor {
-      using type = decay_functor<decltype(&T::operator())>::type;
-    };
-
-    template<typename Instance, typename Ret, typename... Args>
-    struct decay_functor<Ret(Instance::*)(Args...)> {
-      using type = Ret(Args...);
-    };
-
-    template<typename Instance, typename Ret, typename... Args>
-    struct decay_functor<Ret(Instance::*)(Args...) const> {
-      using type = Ret(Args...);
-    };
-
-    template<typename Ret, typename... Args>
-    struct decay_functor<Ret(Args...)> {
-      using type = Ret(Args...);
-    };
-
-    template<typename Ret, typename... Args>
-    struct decay_functor<Ret(&)(Args...)> {
-      using type = Ret(Args...);
-    };
-
-    template<typename Ret, typename... Args>
-    struct decay_functor<Ret(*)(Args...)> {
-      using type = Ret(Args...);
-    };
-  }
-}
-
-template<typename C, typename F>
-concept Callable = std::is_function_v<F> && std::is_same_v<F, typename traits::_::decay_functor<C>::type>;
+#include <cstring>
 
 template<size_t SIZE, typename Ret, typename... Args>
 struct FnImpl {
@@ -53,25 +18,20 @@ private:
   static constexpr size_t SMALL_BUFF_SZ = SIZE - sizeof(CallFn*) - sizeof(DestroyFn*);
   
   union Storage {
-    max_align_t dummy; // mb drop this
-    char buff[SMALL_BUFF_SZ]{};
+    std::max_align_t dummy; // mb drop this
+    char buff[SMALL_BUFF_SZ];
     void* ptr;
     Ret(*fn_ptr)(Args...);
   };
 
 public:
-  FnImpl() = default;
+  FnImpl() noexcept = default;
   
-  FnImpl(const FnImpl&) = delete;
+  FnImpl(const FnImpl&)                    = delete;
   auto operator=(const FnImpl&) -> FnImpl& = delete;
 
-  ~FnImpl() {
-    if(destroy_)
-    {
-      destroy_(&storage_); 
-    }
-    
-    call_ = nullptr;
+  ~FnImpl() noexcept {
+    reset();
   }
 
   template<typename F>
@@ -84,11 +44,11 @@ public:
 
       if constexpr (std::is_void_v<Ret>)
       {
-        callee(std::forward<Args>(args)...);
+        callee(CORE_FWD(args)...);
       }
       else
       {
-        return callee(std::forward<Args>(args)...);
+        return callee(CORE_FWD(args)...);
       }
     }
     else if constexpr (sizeof(CallableType) <= SMALL_BUFF_SZ)
@@ -97,50 +57,50 @@ public:
 
       if constexpr (std::is_void_v<Ret>)
       {
-        callee(std::forward<Args>(args)...);
+        callee(CORE_FWD(args)...);
       }
       else
       {
-        return callee(std::forward<Args>(args)...);
+        return callee(CORE_FWD(args)...);
       }
     }
-    else // get it to compile
+    else
     {
       CallableType& callee = *(CallableType*)storage->ptr;
       if constexpr (std::is_void_v<Ret>)
       {
-        callee(std::forward<Args>(args)...);
+        callee(CORE_FWD(args)...);
       }
       else
       {
-        return callee(std::forward<Args>(args)...);
+        return callee(CORE_FWD(args)...);
       }
     }
   }
 
-  template<typename F> requires(std::is_invocable_r_v<Ret, F, Args...>)
+  template<Callable<Ret(Args...)> F>
   FnImpl(F&& callable) {
     
-    using CallableType = std::remove_cvref_t<F>;
+    using CallableType = std::remove_cvref_t<std::decay_t<F>>;
     
-    if constexpr (std::is_function_v<CallableType>)
+    if constexpr (std::is_function_v<std::remove_pointer_t<CallableType>>) // might be unnecessary
     {
-      storage_.fn_ptr = static_cast<CallableType*>(callable); // ? 
+      storage_.fn_ptr = static_cast<CallableType>(callable); // ? 
       destroy_ = nullptr;
     }
     else if constexpr (sizeof(CallableType) <= SMALL_BUFF_SZ)
     {
-      ::new((void*)(storage_.buff)) CallableType(std::move(callable));
+      ::new((void*)(storage_.buff)) CallableType(CORE_MOVE(callable));
 
       destroy_ = +[](Storage* storage) {
         CallableType& callee = *(CallableType*)&storage->buff;
         callee.~CallableType();
       };
     }
-    else // get it to compile
+    else
     {
       ///NOTE: any room for a custom allocator???
-      storage_.ptr = (void*) new CallableType(std::move(callable));
+      storage_.ptr = (void*) new CallableType(CORE_MOVE(callable));
 
       destroy_ = +[](Storage* storage) {
         CallableType& callee = *(CallableType*)storage->ptr;
@@ -148,22 +108,16 @@ public:
       };
     }
 
-    call_ = &invoker<CallableType>;
+    call_ = &invoker<std::remove_pointer_t<CallableType>>;
   }
 
-  // template<Callable<Ret(Args...)> F>
-  // auto operator=(F&&) -> FnImpl& {
-  //   return *this;
-  // }
-
-  FnImpl(FnImpl&& other)
+  FnImpl(FnImpl&& other) noexcept
    : call_{ other.call_ },
     destroy_{ other.destroy_ }
   {
-    std::memcpy(&storage_, &other.storage_, sizeof(storage_));
-
-    other.call_    = nullptr;
+    std::memcpy(storage_.buff, other.storage_.buff, sizeof(storage_.buff));
     other.destroy_ = nullptr;
+    // other.call_ = nullptr;
   }
 
   auto operator=(FnImpl&& other) noexcept -> FnImpl& {
@@ -173,45 +127,44 @@ public:
     if(destroy_)
       destroy_(&storage_);
 
-    call_ = other.call_;
+    call_    = other.call_;
     destroy_ = other.destroy_;
+      
     std::memcpy(storage_.buff, other.storage_.buff, sizeof(storage_.buff));
-
-    other.call_    = nullptr;
     other.destroy_ = nullptr;
 
     return *this;
   }
 
-  [[nodiscard]] auto operator()(Args... args) const -> Ret {
+  FORCE_INLINE [[nodiscard]] auto operator()(Args... args) const -> Ret {
+    //assert(!is_empty());
     if constexpr (std::is_void_v<Ret>)
     {
-      call_(&storage_, std::forward<Args>(args)...);
+      (void)call_(&storage_, CORE_FWD(args)...);
     }
     else
     {
-      return call_(&storage_, std::forward<Args>(args)...);
+      return call_(&storage_, CORE_FWD(args)...);
     }
   }
-  
-  template<Callable<Ret(Args...)> F>
-  auto target() -> F* {
+   
+  template<Callable<Ret(Args...)> Fx>
+  auto target() const -> const Fx* {
     
-    if (call_ == invoker<F>)
+    using CallableType = std::remove_reference_t<std::decay_t<Fx>>;
+    if (call_ == &invoker<std::remove_pointer_t<CallableType>>)
     {
-      //return (F*)((void*)storage_.buff);
-
-      if constexpr (std::is_function_v<F>)
+      if constexpr (std::is_function_v<std::remove_pointer_t<CallableType>>)
       {
-        return (F*)(storage_.ptr);
+        return (CallableType)(storage_.ptr);
       }
-      else if constexpr (sizeof(F) <= SMALL_BUFF_SZ && !std::is_function_v<F>)
+      else if constexpr (sizeof(CallableType) <= SMALL_BUFF_SZ)
       {
-        return (F*)(&storage_.buff);
+        return (CallableType*)(&storage_.buff);
       }
       else
       {
-        return (F*)(storage_.ptr);
+        return (CallableType*)(storage_.ptr);
       }
     }
     else
@@ -220,28 +173,71 @@ public:
     }
   }
 
-  bool holds() const {
+  template<Callable<Ret(Args...)> Fx>
+  auto target() -> Fx* {
+    using CallableType = std::remove_cvref_t<Fx>;
+    
+    if (call_ == invoker<CallableType>)
+    {
+      if constexpr (std::is_function_v<std::remove_pointer_t<CallableType>>)
+      {
+        return (CallableType*)(storage_.ptr);
+      }
+      else if constexpr (sizeof(CallableType) <= SMALL_BUFF_SZ)
+      {
+        return (CallableType*)(&storage_.buff);
+      }
+      else
+      {
+        return (CallableType*)(storage_.ptr);
+      }
+    }
+    else
+    {
+      return nullptr;
+    }
+  }
+  
+  template<Callable<Ret(Args...)> Fx>
+  bool holds(const Fx& fn) const {
+    
+    const Fx* ptr = target<Fx>();
+    
+    if(ptr && *ptr == fn)
+    {
+      return true;
+    }
+    
     return false;
   }
 
   bool empty() const {
-    return call_ == nullptr;
+    return destroy_ == nullptr;
   }
 
   explicit operator bool() const {
     return !empty();
   }
 
+  void reset() {
+    if (destroy_)
+    {
+      destroy_(&storage_);
+      destroy_ = nullptr;
+      // call_    = nullptr;
+    }
+  }
+
   void swap(FnImpl& fn) {
     std::swap(call_, fn.call_);
     std::swap(destroy_, fn.destroy_);
-    std::swap(storage_, fn.storage_);
+    std::swap(storage_.buff, fn.storage_.buff);
   }
 
 protected:
   CallFn* call_       = nullptr;
   DestroyFn* destroy_ = nullptr;
-  Storage storage_{};
+  Storage storage_;
 };
 
 template<size_t, typename>
@@ -255,7 +251,7 @@ struct GetFnImpl<SIZE, Ret(Args...)> {
 };
 
 template<typename F>
-class Fn : GetFnImpl<64ULL, F>::Type {
+class Fn : public GetFnImpl<64ULL, F>::Type {
 private:
   using Base = GetFnImpl<64ULL, F>::Type;
   using Type = Base::Type;
@@ -271,6 +267,32 @@ public:
   using Base::empty;
   using Base::holds;
   using Base::target;
+  using Base::reset;
+  using Base::swap;
+};
+
+template<typename T>
+using Fn64 = Fn<T>;
+
+template<typename F>
+class Fn24 : public GetFnImpl<24ULL, F>::Type {
+private:
+  using Base = GetFnImpl<24ULL, F>::Type;
+  using Type = Base::Type;
+
+public:
+  using ResultType = Base::ResultType;
+
+public:
+  using Base::Base;
+  
+  using Base::operator();
+  using Base::operator bool;
+  using Base::empty;
+  using Base::holds;
+  using Base::target;
+  using Base::reset;
+  using Base::swap;
 };
 
 template<typename F>
@@ -290,10 +312,12 @@ public:
   using Base::empty;
   using Base::holds;
   using Base::target;
+  using Base::reset;
+  using Base::swap;
 };
 
 template<typename F>
-class Fn40 : GetFnImpl<40ULL, F>::Type {
+class Fn40 : public GetFnImpl<40ULL, F>::Type {
 private:
   using Base = GetFnImpl<40ULL, F>::Type;
   using Type = Base::Type;
@@ -309,10 +333,12 @@ public:
   using Base::empty;
   using Base::holds;
   using Base::target;
+  using Base::reset;
+  using Base::swap;
 };
 
 template<typename F>
-class Fn48 : GetFnImpl<48ULL, F>::Type {
+class Fn48 : public GetFnImpl<48ULL, F>::Type {
 private:
   using Base = GetFnImpl<48ULL, F>::Type;
   using Type = Base::Type;
@@ -328,19 +354,48 @@ public:
   using Base::empty;
   using Base::holds;
   using Base::target;
+  using Base::reset;
+  using Base::swap;
 };
 
+template<typename F>
+Fn(F&&) -> Fn<typename core::traits::_::decay_functor<F>::type>;
 
 template<typename F>
-Fn(F&&) -> Fn<typename traits::_::decay_functor<F>::type>;
+Fn32(F&&) -> Fn32<typename core::traits::_::decay_functor<F>::type>;
 
 template<typename F>
-Fn32(F&&) -> Fn32<typename traits::_::decay_functor<F>::type>;
+Fn40(F&&) -> Fn40<typename core::traits::_::decay_functor<F>::type>;
 
 template<typename F>
-Fn40(F&&) -> Fn40<typename traits::_::decay_functor<F>::type>;
+Fn48(F&&) -> Fn48<typename core::traits::_::decay_functor<F>::type>;
 
-template<typename F>
-Fn48(F&&) -> Fn48<typename traits::_::decay_functor<F>::type>;
+// template<typename F>
+// struct MemFn;
 
+// template<typename Ret, typename Instance, typename... Args>
+// struct MemFn<Ret(Instance::*)(Args...)> {
+//   using callable_type = Ret(Instance::*)(Args...);
+  
+//   MemFn(callable_type fn, Instance* instance) {
 
+//   }
+
+//   auto operator()(Args... args) -> Ret {
+//     if constexpr(std::is_void_v<Ret>)
+//     {
+//       instance->*fn(CORE_FWD(args)...);
+//     }
+//     else 
+//     {
+//       return instance->*fn(CORE_FWD(args)...);
+//     }
+//   }
+
+// };
+
+// template<typename Ret, typename Instance, typename... Args>
+// struct MemFn<Ret(Instance::*)(Args...) const>;
+
+// template<typename Ret, typename Instance, typename... Args>
+// struct MemFn<Ret(Instance::*)(Args...) const noexcept>;
