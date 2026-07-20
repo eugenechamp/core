@@ -25,9 +25,3 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 add_library(tuplet INTERFACE)
 target_include_directories(tuplet INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/tuplet/include)
-
-if(TARGET tuplet)
-    message(STATUS "tuplet exists")
-endif()
-
-message(${CMAKE_CURRENT_SOURCE_DIR})

@@ -28,7 +28,7 @@ PUBLIC
   include/core/ts_queue.hpp
   include/core/thread_pool.hpp
   include/core/string_hash.hpp
-  include/core/strong_type.hpp
+  include/core/wrapper.hpp
   include/core/tuple.hpp
 )
 
@@ -40,12 +40,6 @@ PUBLIC
 
 target_sources(core PRIVATE ${CORE_INCLUDES} ${CORE_SOURCES})
 target_link_libraries(core PUBLIC tuplet)
-
-get_target_property(INCLUDES core INCLUDE_DIRECTORIES)
-message("${INCLUDES}")
-
-get_target_property(INTERFACE_INCLUDES core INTERFACE_INCLUDE_DIRECTORIES)
-message("${INTERFACE_INCLUDES}")
 
 add_subdirectory(3rd_party)
 add_subdirectory(tests)
