@@ -17,7 +17,6 @@ private:
 template<typename T, typename E>
 class Expected {
   friend Unexpected<E>;
-
 public:
   Expected() = default;
   

@@ -8,42 +8,44 @@ public:
   using size_type  = size_t;
 
 public:
-  Span()  = default;
-  ~Span() = default;
+  constexpr Span()  = default;
+  constexpr ~Span() = default;
   
-  auto data() noexcept -> value_type* { 
-    return data_; 
+  constexpr auto data() noexcept -> value_type* { 
+    return data_;
   }
 
-  auto data() const noexcept -> const value_type* { 
+  constexpr auto data() const noexcept -> const value_type* { 
     return data_; 
   }
   
-  auto size() const noexcept -> size_type {
+  constexpr auto size() const noexcept -> size_type {
     return size_;
   }
-
-  auto operator[](size_type index) const noexcept -> value_type& {
+  
+  constexpr auto operator[](size_type index) noexcept -> value_type& {
+    // ASSERT(index < size(), Span<{}> out of bounds access, core::meta::nameof<value_type>());
     return data_[index];
   }
   
-  auto operator[](size_type index) const noexcept -> const value_type& {
+  constexpr auto operator[](size_type index) const noexcept -> const value_type& {
+    // ASSERT(index < size(), Span<{}> out of bounds access, core::meta::nameof<value_type>());
     return data_[index];
   }
 
-  auto at(size_type index) noexcept -> value_type& {
+  constexpr auto at(size_type index) noexcept -> value_type& {
     return data_[index];
   }
   
-  auto at(size_type index) const noexcept -> const value_type& {
+  constexpr auto at(size_type index) const noexcept -> const value_type& {
     return data_[index];
   }
 
-  auto begin() -> value_type* {
+  constexpr auto begin() -> value_type* {
     return data_;
   }
   
-  auto end() -> value_type* {
+  constexpr auto end() -> value_type* {
     return data_ + size_;
   }
 

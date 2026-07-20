@@ -89,8 +89,8 @@ public:
 
 private:
   // NOTE: may default initialize the value, shouldn't be an issue at all, 
-  // but consider using "byte[sizeof(T)]" with placement new if perf hurts
-  T value_; 
+  // but consider using "alignas(T) char[sizeof(T)]" with placement new if perf hurts
+  T value_;
   bool has_value_ = false;
 };
 
@@ -103,10 +103,10 @@ public:
   Optional() = default;
   ~Optional() = default;
 
-  Optional(const Optional&)                     = default;
+  Optional(const Optional&)                    = default;
   auto operator=(const Optional&) -> Optional& = default;
 
-  Optional(Optional&&) noexcept                     = default;
+  Optional(Optional&&) noexcept                    = default;
   auto operator=(Optional&&) noexcept -> Optional& = default;
 
   Optional(value_type val)
