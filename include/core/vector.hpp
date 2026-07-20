@@ -26,9 +26,8 @@ public:
     : m_{ .alloc = other.m_.alloc }
   {
     _do_alloc(other.size());
-    
-    /// BUGFIX: this is wrong we need to copy each element, not memcopying it, stupido
-    _do_memcopy(other.data(), other.size());
+
+    _do_copy_from(other.data(), other.size());
     m_.size = other.size();
   }
   
@@ -468,6 +467,13 @@ private:
 
   void _do_memcopy(value_type* dst, size_type sz) noexcept {
     std::memcpy(dst, m_.data, sz * sizeof(value_type));
+  }
+  
+  void _do_copy_from(const value_type* arr, size_type sz) noexcept {
+    for (size_type i{}; i < sz; i++)
+    {
+      ::new((void*)(m_.data + i)) value_type(arr[i]);
+    }
   }
 
   void _destructive_move_overlapped(value_type* dst, size_type sz) noexcept {
