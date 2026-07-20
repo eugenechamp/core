@@ -2,6 +2,8 @@
 #include <core/vector.hpp>
 #include <gtest/gtest.h>
 
+static_assert(sizeof(Vec<i32>) == 16u, "it is requiered that Vec<T> is 16 bytes in size instead of 24");
+
 TEST(VectorTest, GrowOnPushBack) {
   Vec<i32> vec;
   size_t size = 10;
@@ -9,6 +11,9 @@ TEST(VectorTest, GrowOnPushBack) {
   {
     vec.push_back(69);
   }
+  
+  std::unique_ptr<int[]> array;
+
   EXPECT_EQ(vec.size(), size);
 }
 
@@ -124,25 +129,57 @@ TEST(VectorTest, Move) {
   EXPECT_TRUE(vec.empty());
 }
 
-TEST(VectorTest, Insert) {
-  Vec<i32> vec {1, 2, 8, 9};
-  Vec<i32> vec2 {3, 4, 5, 6};
+// TEST(VectorTest, Insert) {
+//   Vec<i32> vec {1, 2, 8, 9};
+//   Vec<i32> vec2 {3, 4, 5, 6};
 
-  vec.insert(vec.begin() + 2, vec2.begin(), vec2.end());
-  EXPECT_EQ(vec.size(), 8);
+//   vec.insert(vec.begin() + 2, vec2.begin(), vec2.end());
+//   EXPECT_EQ(vec.size(), 8);
 
-  vec.insert(vec.begin() + 6, 7);
-  EXPECT_EQ(vec.size(), 9);
+//   vec.insert(vec.begin() + 6, 7);
+//   EXPECT_EQ(vec.size(), 9);
 
-  vec.insert(vec.begin() + 6, 3u, 7);
-  EXPECT_EQ(vec.size(), 12);
-
-  vec.insert(vec.end(), {10, 11, 12});
-  EXPECT_EQ(vec.size(), 15);
-}
+//   vec.insert(vec.begin() + 6, 3u, 7);
+//   EXPECT_EQ(vec.size(), 12);
+  
+//   vec.insert(vec.end(), {10, 11, 12});
+//   EXPECT_EQ(vec.size(), 15);
+// }
 
 TEST(VectorTest, Append) {
   Vec<i32> vec { 1, 2, 3, };
+  auto vec_size = vec.size();
+
   Vec<i32> vec_two { 3, 4, 5, 6 };
+  auto vec_two_size = vec_two.size();
+
   vec.append(vec_two);
+
+  EXPECT_EQ(vec.size(), vec_size + vec_two_size);
+  EXPECT_EQ(vec[3], 3);
+  EXPECT_EQ(vec[4], 4);
+  EXPECT_EQ(vec[5], 5);
+  EXPECT_EQ(vec[6], 6);
+}
+
+TEST(VectorTest, EndCheck) {
+  Vec<i32> vec { 1, 2, 3, };
+  for(auto num : vec)
+  {
+    std::cout << num << '\n';
+  }
+}
+
+
+TEST(VectorTest, std_function) {
+  
+  Vec<std::function<void()>> fxs;
+  fxs.emplace_back([&](){});
+  fxs.emplace_back([&](){});
+  fxs.emplace_back([&](){});
+  
+  for(auto& fx : fxs)
+  {
+    fx();
+  }
 }

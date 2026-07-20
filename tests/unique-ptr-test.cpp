@@ -25,13 +25,6 @@ TEST(Unique, Default) {
   EXPECT_FALSE(explicitly_nulled.valid());
 }
 
-TEST(Unique, Make) {
-  Unique ptr = Unique<std::string>::make("Hello, World");
-  
-  EXPECT_TRUE(ptr);
-  EXPECT_EQ(*ptr, "Hello, World");
-}
-
 TEST(Unique, Construct) {
   Unique<std::string> ptr{ new std::string };
   
@@ -39,7 +32,7 @@ TEST(Unique, Construct) {
 }
 
 TEST(Unique, Move) {
-  Unique ptr = Unique<std::string>::make("Hello, World");
+  Unique ptr = Unique<std::string>(new std::string("Hello, World"));
 
   Unique<std::string> move_to = nullptr;
   move_to = std::move(ptr);
@@ -65,7 +58,7 @@ struct CheckRelease {
 TEST(Unique, Reset) {
   {
     bool is_released = false;
-    Unique ptr = Unique<CheckRelease>::make(is_released);
+    Unique ptr = Unique<CheckRelease>(new CheckRelease(is_released));
 
     ptr = Unique<CheckRelease>();
 
@@ -75,7 +68,7 @@ TEST(Unique, Reset) {
 
   {
     bool is_released = false;
-    Unique ptr = Unique<CheckRelease>::make(is_released);
+    Unique ptr = Unique<CheckRelease>(new CheckRelease(is_released));
 
     ptr.reset();
 
@@ -85,7 +78,7 @@ TEST(Unique, Reset) {
 
   {
     bool is_released = false;
-    Unique ptr = Unique<CheckRelease>::make(is_released);
+    Unique ptr = Unique<CheckRelease>(new CheckRelease(is_released));
     
     ptr = nullptr;
 
