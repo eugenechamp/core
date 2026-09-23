@@ -58,7 +58,7 @@ using f64 = double;
 
 #ifndef FORCE_INLINE
   #if defined(_MSC_VER)
-    #define FORCE_INLINE [[msvc::forceinline]]
+    #define FORCE_INLINE __forceinline
   #elif defined(__GNUC__) || defined(__clang__)
     #define FORCE_INLINE [[gnu::forceinline]] inline
   #endif

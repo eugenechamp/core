@@ -58,10 +58,9 @@ TEST(StringHash, FindString) {
 
 TEST(StringHash, SmallSwitch) {
   using namespace core::sh_literals;
-  
   StringHash string_hash("Component");
   switch(string_hash) {
-    case "Transform"_sh64: {} break; 
+    case "Transform"_sh64: { FAIL(); } break;
     case "Music"_sh64: { FAIL(); } break;
     case "Audio"_sh64: { FAIL(); } break;
     case "Component"_sh64: { SUCCEED(); } break;
@@ -69,7 +68,7 @@ TEST(StringHash, SmallSwitch) {
     case "Cursor"_sh64: { FAIL(); } break;
     case "World"_sh64: { FAIL(); } break;
     case "DirectionalLight"_sh64: { FAIL(); } break;
-    default: 
+    default:
       FAIL();
   };
 }

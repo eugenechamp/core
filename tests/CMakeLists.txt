@@ -37,6 +37,11 @@ target_sources(string_hash_test PRIVATE string_hash_test.cpp)
 target_include_directories(string_hash_test PRIVATE "${CMAKE_SOURCE_DIR}/include/")
 target_link_libraries(string_hash_test PRIVATE core GTest::gtest GTest::gtest_main)
 
+add_executable(wrapper_test)
+target_sources(wrapper_test PRIVATE wrapper_test.cpp)
+target_include_directories(wrapper_test PRIVATE "${CMAKE_SOURCE_DIR}/include/")
+target_link_libraries(wrapper_test PRIVATE core GTest::gtest GTest::gtest_main)
+
 include(GoogleTest)
 
 gtest_discover_tests(vector-test)
@@ -44,5 +49,6 @@ gtest_discover_tests(unique-ptr-test)
 gtest_discover_tests("optional-test")
 gtest_discover_tests("fn-test")
 gtest_discover_tests("string_hash_test")
+gtest_discover_tests("wrapper_test")
 
 endif()

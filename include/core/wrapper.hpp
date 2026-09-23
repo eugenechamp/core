@@ -4,8 +4,8 @@
 #include <concepts>
 
 template<typename From, typename To>
-concept NoNarrowing = requires(To&& to) {
-  { From{ CORE_FWD(to) } };
+concept NoNarrowing = requires(From&& from) {
+  { To{ CORE_FWD(from) } };
 };
 
 template<typename T>
@@ -30,7 +30,7 @@ concept HasGreaterThanOrEqual = requires(const T& a, const T& b) {
 
 template<typename T>
 struct Wrapper {
-  using value_type = T;
+  using value_type  = T;
   
 public:
   explicit constexpr Wrapper()  = default;
@@ -41,7 +41,7 @@ public:
   constexpr auto operator=(Wrapper&&) -> Wrapper&      = default;
   constexpr auto operator=(const Wrapper&) -> Wrapper& = default;
 
-  template<typename Arg, typename... Args> requires(NoNarrowing<T, Arg>)
+  template<typename Arg, typename... Args> requires(NoNarrowing<Arg, T>)
   FORCE_INLINE explicit constexpr Wrapper(Arg&& arg, Args&&... args)
     : value_{ CORE_FWD(arg), CORE_FWD(args)... }
   {}
@@ -74,47 +74,50 @@ public:
     return value_;
   }
 
-  template<std::derived_from<Wrapper<T>> WrapperType>
-  friend FORCE_INLINE constexpr bool operator==(const WrapperType& lhs, const WrapperType& rhs) const
+  template<std::derived_from<Wrapper> WrapperType>
+  FORCE_INLINE friend constexpr bool operator==(const WrapperType& lhs, const WrapperType& rhs)
     requires(std::equality_comparable<T>)
   {
-    return value_ == other.value_;
+    return lhs.value_ == rhs.value_;
   }
-  
-  FORCE_INLINE constexpr bool operator<(const Wrapper& other) const
+
+  template<std::derived_from<Wrapper> WrapperType>
+  FORCE_INLINE friend constexpr bool operator<(const WrapperType& lhs, const WrapperType& rhs)
     requires(HasLessThan<T>)
   {
-    return value_ < other.value_;
+    return lhs.value_ < rhs.value_;
   }
 
-  FORCE_INLINE constexpr bool operator>(const Wrapper& other) const
+  template<std::derived_from<Wrapper> WrapperType>
+  FORCE_INLINE friend constexpr bool operator>(const WrapperType& lhs, const Wrapper& rhs)
     requires(HasGreaterThan<T>) 
   {
-    return value_ > other.value_;
-  }
-  
-  FORCE_INLINE constexpr bool operator<=(const Wrapper& other) const
-    requires(HasLessThanOrEqual<T>) 
-  {
-    return value_ <= other.value_;
+    return lhs.value_ > rhs.value_;
   }
 
-  FORCE_INLINE constexpr bool operator>=(const Wrapper& other) const
+  template<std::derived_from<Wrapper> WrapperType>
+  FORCE_INLINE friend constexpr bool operator<=(const WrapperType& lhs, const WrapperType& rhs)
+    requires(HasLessThanOrEqual<T>) 
+  {
+    return lhs.value_ <= rhs.value_;
+  }
+
+  template<std::derived_from<Wrapper> WrapperType>
+  FORCE_INLINE friend constexpr bool operator>=(const WrapperType& lhs, const WrapperType& rhs)
     requires(HasGreaterThanOrEqual<T>) 
   {
-    return value_ >= other.value_;
+    return lhs.value_ >= rhs.value_;
   }
     
 private:
   value_type value_;
 };
 
-
-template<typename T>
-requires std::is_base_of_v<Wrapper<typename T::value_type>, T>
-struct std::hash<T> {
-  auto operator()(const T& key) const noexcept -> size_t {
-    return std::hash<typename T::value_type>{}(key.value());
+template<typename WrapperType>
+requires std::is_base_of_v<Wrapper<typename WrapperType::value_type>, WrapperType>
+struct std::hash<WrapperType> {
+  auto operator()(const WrapperType& key) const noexcept -> size_t {
+    return std::hash<typename WrapperType::value_type>{}(key.value());
   }
 };
 
@@ -124,23 +127,23 @@ concept OutStreamable = requires(std::ostream& out, const T& value) {
 };
 
 template<typename T>
-concept InStreamable = requires(std::istream& in, T& value) {
+concept InStreamable = requires(std::istream& in, const T& value) {
   { in >> value } -> std::convertible_to<std::istream&>;
 };
 
-template<typename T> requires(
-  std::derived_from<T, Wrapper<typename T::value_type>> 
-  && OutStreamable<typename T::value_type>
+template<typename WrapperType> requires(
+  std::derived_from<WrapperType, Wrapper<typename WrapperType::value_type>> 
+  && OutStreamable<typename WrapperType::value_type>
 )
-auto operator<<(std::ostream& out, const T& source) -> std::ostream& {
+auto operator<<(std::ostream& out, const WrapperType& source) -> std::ostream& {
   return out << source.value();
 }
 
-template<typename T> requires(
-  std::derived_from<Wrapper<typename T::value_type>, T> &&
-  InStreamable<typename T::value_type>
+template<typename WrapperType> requires(
+  std::derived_from<WrapperType, Wrapper<typename WrapperType::value_type>> &&
+  InStreamable<typename WrapperType::value_type>
 )
-auto operator>>(std::istream& in, T& source) -> std::istream&
+auto operator>>(std::istream& in, WrapperType& source) -> std::istream&
 {
   return in >> source.value();
 }

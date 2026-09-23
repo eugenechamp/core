@@ -36,8 +36,13 @@ namespace core {
 #endif
 }
 
-template<typename... Ts>
-using Tuple = tuplet::tuple<Ts...>;
+#ifdef CORE_USE_STD_TUPLE
+  template<typename... Ts>
+  using Tuple = std::tuple<Ts...>;
+#else
+  template<typename... Ts>
+  using Tuple = tuplet::tuple<Ts...>;
+#endif
 
 #if 0 
 template<typename... Ts>
